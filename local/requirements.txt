@@ -1,0 +1,11 @@
+ipython>=7.3.0
+pymongo>=3.7.2
+requests>=2.19.1
+tqdm>=4.31.1
+bs4>=0.0.1
+dnspython>=1.16.0
+Flask>=1.1.1
+Flask-WTF>=0.14.2
+WTForms>=2.2.1
+pandas>=0.24.2
+boto3>=1.9
