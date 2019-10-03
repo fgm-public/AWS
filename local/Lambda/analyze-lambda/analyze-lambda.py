@@ -1,46 +1,43 @@
 
-# This function analyze vacancies from the database (MongoDB),
-# generate xlsx report and upload it to the AWS S3 Storage.
-# Then add xlsx report public hyperlink to the database (MongoDB).
+# This function analyzes vacancies from the database (MongoDB),
+# generates xlsx report and upload it to the AWS S3 Storage.
+# Then adds xlsx report public hyperlink to the database (MongoDB).
 # This is LOCAL version, intended fot testing purposes only!
 
-import io
-import re
-import json
-import time
-import boto3
-import pandas
-import pymongo
-import requests
-import xlsxwriter
-import statistics
-import collections
+# Output stream for saving report files:
+from io import BytesIO
+# Regular expressions:
+from re import sub, findall
+# Some stuff to deserialize objects:
+from json import loads
+# For xlsx reports creation:
+from pandas import DataFrame, ExcelWriter
+# MongoDB driver:
+from pymongo import MongoClient
+# Some mathematics:
+from statistics import median
+# Count items:
+from collections import Counter
+# HTML parsing:
 from bs4 import BeautifulSoup
-from credentials import s3, mongo
-# install openpyxl
+# And finally, our credentials:
+from credentials import s3, mongo, sqs, queue
 
 class VacancyAnalyzer:
     ''' Сlass is designed to analyze information about vacancies'''
-
-    # Normal workflow:
-    #  from vacancy_analyzer import VacancyAnalyzer
-    #  v = VacancyAnalyzer('Бизнес аналитик')
-    #  get_vacancies_from_mongo()
-    #  analyze()
-    #  store_report_to_s3()
-    #  add_href_to_mongo()
 
 #---------------------------------------------------------------------------------------------------------
 #---Initializations---------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    def __init__(self, occupation):
+    def __init__(self): ##, occupation):
 
         # Full vacancies batch itself
         self.vacancies = None
 
         # Occupation name
-        self.occupation = occupation
+        ##self.occupation = occupation
+        self.occupation = None
 
         # s3 public hyperlink to xlsx report
         self.report_url = None
@@ -201,11 +198,20 @@ class VacancyAnalyzer:
 #---Public service methods--------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
+    # Get occupation from queue
+    #---------------------------------------------------------------------------------------------------------
+    def get_occupation_from_queue(self):
+        raw_message = sqs.receive_message(QueueUrl=queue)
+        payload = loads(raw_message.get('Messages')[0].get('Body'))
+        #return payload.get('occupation')
+        self.occupation = payload.get('occupation')
+
+
     # Get vacancies from MongoDB
     #---------------------------------------------------------------------------------------------------------
     def get_vacancies_from_mongo(self):
 
-        client = pymongo.MongoClient(mongo).hh_vacancies
+        client = MongoClient(mongo).hh_vacancies
         collection = client[self.occupation]
 
         self.vacancies = [document
@@ -218,14 +224,14 @@ class VacancyAnalyzer:
 
         def form_sheet(data, columns, name):
             # Defines sheet structure
-            sheet = pandas.DataFrame(data, columns=columns)
+            sheet = DataFrame(data, columns=columns)
             # Add sheet to xlsx document
             sheet.to_excel(writer, name, index=False)
 
         # Defines output stream
-        output = io.BytesIO() #
+        output = BytesIO() #
         # Defines pandas xlsx writer
-        writer = pandas.ExcelWriter(output) ##, engine='xlsxwriter'
+        writer = ExcelWriter(output) ##, engine='xlsxwriter'
         ##writer = pandas.ExcelWriter(f'{self.store_path}/{self.occupation}-{len(self.vacancies)}.xlsx')
 
         form_sheet(self.vacancy_names, ['Название должности', 'Вхождений'], 'Должности')
@@ -276,7 +282,7 @@ class VacancyAnalyzer:
     #---------------------------------------------------------------------------------------------------------
     def add_href_to_mongo(self):
         
-        client = pymongo.MongoClient(mongo).hh_reports
+        client = MongoClient(mongo).hh_reports
         collection = client['xlsx'] 
         
         occupations = [document.get('occupation')
@@ -452,7 +458,7 @@ class VacancyAnalyzer:
         def extract_by_criteria(criteria):
             
             if self.description_elements.get(criteria):
-                clear_strings = [re.sub("[^А-Яа-я0-9-.\s]", "", describe_string.lower().strip().strip('.'))
+                clear_strings = [sub("[^А-Яа-я0-9-.\s]", "", describe_string.lower().strip().strip('.'))
                     for describe_string in self.description_elements.get(criteria)]
 
                 unique_clear_set = set(clear_strings)
@@ -460,10 +466,10 @@ class VacancyAnalyzer:
                     for string in unique_clear_set]
 
                 ##unique_strings = sorted(unique_strings, key=len)
-                bags_words = [collections.Counter(re.findall(r'\w+', string))
+                bags_words = [Counter(findall(r'\w+', string))
                     for string in unique_strings]
 
-                bag_words = sum(bags_words, collections.Counter())
+                bag_words = sum(bags_words, Counter())
                 sorted_bag = sorted(bag_words.items(), key=lambda x: x[1], reverse=True)
                 result = [word for word in sorted_bag
                     if len(word[0]) > 4]
@@ -474,7 +480,7 @@ class VacancyAnalyzer:
             for criteria in self.description_sections_top}
         
         all_words_in_string = ' '.join(self.description_elements_all)    
-        bags_words = collections.Counter(re.findall(r'\w+', all_words_in_string))
+        bags_words = Counter(findall(r'\w+', all_words_in_string))
         self.wordbags_all = sorted(bags_words.items(), key=lambda x: x[1], reverse=True)
 
 
@@ -487,7 +493,7 @@ class VacancyAnalyzer:
             for vacancy in self.vacancies]
 
         # Extract english words
-        raw_eng_extraxtions = [re.sub("[^A-Za-z]", " ", description.strip())
+        raw_eng_extraxtions = [sub("[^A-Za-z]", " ", description.strip())
             for description in descriptions]
         
         # Clearing
@@ -544,7 +550,7 @@ class VacancyAnalyzer:
                 for strong in strong_soup]
 
         # Clearing
-        clear_strongs = [re.sub("[^А-Яа-я\s]", "", strong.strip())
+        clear_strongs = [sub("[^А-Яа-я\s]", "", strong.strip())
             for strong in strongs]
 
         clear_strongs = list(filter(None, clear_strongs))
@@ -703,7 +709,7 @@ class VacancyAnalyzer:
                     if salary.get('to'):
                         salary_all.append(salary.get('to'))
 
-        self.median_salary = statistics.median(salary_all)
+        self.median_salary = median(salary_all)
 
 
     # Calculate modal salary
@@ -739,3 +745,13 @@ class VacancyAnalyzer:
         self._median_salary()
         self._modal_salary()
         self._employers_collector()
+
+
+def main():
+    from vacancy_analyzer import VacancyAnalyzer
+    v = VacancyAnalyzer()
+    v.get_occupation_from_queue()
+    v.get_vacancies_from_mongo()
+    v.analyze()
+    v.store_report_to_s3()
+    v.add_href_to_mongo()
