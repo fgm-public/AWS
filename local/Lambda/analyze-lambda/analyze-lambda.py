@@ -234,15 +234,15 @@ class VacancyAnalyzer:
         writer = ExcelWriter(output) ##, engine='xlsxwriter'
         ##writer = pandas.ExcelWriter(f'{self.store_path}/{self.occupation}-{len(self.vacancies)}.xlsx')
 
-        form_sheet(self.vacancy_names, ['Название должности', 'Вхождений'], 'Должности')
-        form_sheet(self.skills_all, ['Ключевые навыки (тэги)', 'Вхождений'], 'Ключевые навыки (тэги)')
-        form_sheet(self.experience, ['Требуемый опыт', 'Вхождений'], 'Опыт')
-        form_sheet(self.keywords_all, ['Продукты|Технологии', 'Вхождений'], 'Продукты|Технологии')
+        form_sheet(self.vacancy_names, ['Название должности', 'Количество вакансий'], 'Должности')
+        form_sheet(self.skills_all, ['Ключевые навыки (тэги)', 'Вакансий'], 'Ключевые навыки (тэги)')
+        form_sheet(self.experience, ['Требуемый опыт', 'Вакансий'], 'Опыт')
+        form_sheet(self.keywords_all, ['Продукты|Технологии', 'Вакансий'], 'Продукты|Технологии')
         form_sheet(self.employers_brief.items(), ['Работодатель', 'Ссылка'], 'Работодатели')
-        form_sheet(self.regions, ['Регион', 'Вхождений'], 'Регионы')
-        form_sheet(self.profareas, ['Профобласть', 'Вхождений'], 'Укрупнённые профобласти')
-        form_sheet(self.profareas_granular, ['Специализация', 'Вхождений'], 'Специализации профобластей')
-        form_sheet(self.salary_groups.items(), ['Диапазон', 'Вхождений'], 'Зарплатные группы')
+        form_sheet(self.regions, ['Регион', 'Вакансий'], 'Регионы')
+        form_sheet(self.profareas, ['Профобласть', 'Вакансий'], 'Укрупнённые профобласти')
+        form_sheet(self.profareas_granular, ['Специализация', 'Вакансий'], 'Специализации профобластей')
+        form_sheet(self.salary_groups.items(), ['Диапазон', 'Вакансий'], 'Зарплатные группы')
         form_sheet([(self.average_salary, self.median_salary, self.modal_salary),],
                    ['Средняя зарплата', 'Медианная зарплата', 'Модальная зарплата'], 'Зарплата')
 

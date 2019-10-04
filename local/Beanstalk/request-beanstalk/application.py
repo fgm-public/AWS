@@ -60,11 +60,10 @@ def add_message_to_queue(occupation, email):
     # Serialize message object, because queue requires string messages
     message = dumps(raw_message)
     # Put it to queue
-    sqs.send_message(QueueUrl=queue,
-                     MessageBody=message,
-                     MessageDeduplicationId='0',
-                     MessageGroupId='0',
-                     )
+    sqs.send_message(
+            QueueUrl=queue,
+            MessageBody=message,
+        )
 
 # Default handler function which will start when our root web app Url will be visited
 @app.route("/", methods=['GET', 'POST'])
