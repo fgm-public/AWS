@@ -11,21 +11,47 @@ from pymongo import MongoClient
 # Our beloved requests:
 import requests
 # Some stuff to deserialize objects:
-from json import loads
+from json import loads, dumps
 # Preetty progress bar:
 from tqdm import tqdm
 # And finally, our credentials:
-from credentials import mongo, sqs, queue
+from credentials import mongo, sqs, incoming_queue, outgoing_queue
 
-# This function gets a message from the queue, which was sent by the beanstalk web app.
-# The Message contains occupation name to request it from HH API.
-def get_occupation_from_queue():
-    # Receive a message from queue
-    raw_message = sqs.receive_message(QueueUrl=queue)
-    # Deserialize it
-    payload = loads(raw_message.get('Messages')[0].get('Body'))
-    # Return occupation name
-    return payload.get('occupation')
+# This function deletes a message from the queue,
+# which was sent by the beanstalk app.
+def delete_message_from_queue():
+    # Receive message and provide 'VisibilityTimeout' to queue
+    raw_message = sqs.receive_message(QueueUrl=incoming_queue,
+                                      VisibilityTimeout=60)
+    # Receive 'ReceiptHandle' from message
+    receipt_handle = raw_message['Messages'][0]['ReceiptHandle']
+    # And finally deletes the message
+    sqs.delete_message(QueueUrl=incoming_queue,
+                       ReceiptHandle=receipt_handle)
+
+# This function queues a message to wake up the next lambda.
+def add_message_to_queue():
+    # Create message (dict object)
+    raw_message = {"Wake": 'Up'}
+    # Serialize message object, because queue requires string messages
+    message = dumps(raw_message)
+    # Put it to queue
+    sqs.send_message(
+            QueueUrl=outgoing_queue,
+            MessageBody=message,)
+
+# This function gets an occupation name from MongoDB to request it from HH API.
+def get_occupation_from_mongo():
+    # Connection to 'hh_reports' database object
+    client = MongoClient(mongo).hh_reports
+    # Connection to 'orders' collection object
+    collection = client['orders']
+    # Get number of last added order
+    number = collection.estimated_document_count()-1
+    # Get occupation name
+    raw_document = collection.find().skip(number)
+    occupation = raw_document[0].get('occupation')
+    return occupation
 
 # A BRIEF version of the request to API function which retrieve small batch,
 # because of requests limitations.
@@ -95,9 +121,13 @@ def vacancy_retriever(occupation):
         sleep(int(delay))
     return vacancies
 
-def main():
+if __name__ == "__main__":
+    
+    # Deletes a 'wake-up' message from the queue
+    delete_message_from_queue()
     # Retrieve the occupation name
-    occupation = get_occupation_from_queue()
+    ##occupation = get_occupation_from_queue()
+    occupation = get_occupation_from_mongo()
     # Open hh_vacancies database
     client = MongoClient(mongo).hh_vacancies
     # Usually, we use a BRIEF version of the function,
@@ -107,3 +137,5 @@ def main():
     collection = client[occupation]
     # Write data into collection
     collection.insert_many(vacancies)
+    # Sends a 'wake-up' message to the queue for next lambda
+    add_message_to_queue()

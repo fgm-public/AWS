@@ -15,4 +15,4 @@ sqs = boto3.client('sqs',
     )
 
 # AWS SQS queue instance    
-queue = 'https://sqs.us-east-2.amazonaws.com/123456789010/report.fifo'
+incoming_queue = 'https://sqs.us-east-2.amazonaws.com/123456789010/myiqueue'

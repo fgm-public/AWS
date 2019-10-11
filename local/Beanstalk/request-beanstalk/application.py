@@ -16,7 +16,7 @@ from pymongo import MongoClient
 # Our beloved requests :) :
 import requests
 # And finally, our credentials:
-from credentials import mongo, sqs, queue, SECRET_KEY
+from credentials import mongo, sqs, outgoing_queue, SECRET_KEY
 
 # Initialize Flask web application instance itself
 app = Flask(__name__)
@@ -47,23 +47,26 @@ def get_href_from_mongo(occupation, email):
             # Return hyperlink
             return report.get('report')
         else:
-            # Connection to 'orders' collection object
-            collection = client['orders']
-            # Put request order
-            collection.insert({'customer': email, 'occupation': occupation})
+            add_order_to_mongo(client, occupation, email)
             return None
 
-# This function queues a message including occupation and mail.
-def add_message_to_queue(occupation, email):
+# This function adds a request order to MongoDB.
+def add_order_to_mongo(client, occupation, email):
+    # Connection to 'orders' collection object
+    collection = client['orders']
+    # Put request order
+    collection.insert({'customer': email, 'occupation': occupation})
+
+# This function queues a message to wake up the next lambda.
+def add_message_to_queue():
     # Create message (dict object)
-    raw_message = {"customer": email, "occupation": occupation}
+    raw_message = {"Wake": 'Up'}
     # Serialize message object, because queue requires string messages
     message = dumps(raw_message)
     # Put it to queue
     sqs.send_message(
-            QueueUrl=queue,
-            MessageBody=message,
-        )
+            QueueUrl=outgoing_queue,
+            MessageBody=message)
 
 # Default handler function which will start when our root web app Url will be visited
 @app.route("/", methods=['GET', 'POST'])
@@ -82,17 +85,15 @@ def _request():
                 # Create response
                 response = (f'Your report is ready! '
                             f'<a href="{report_url}" class="alert-link">Click here</a> '
-                            f'to download it!'
-                            )
+                            f'to download it!')
                 # Put it to user
                 flash(Markup(response))
             else:
                 # Reassure user
                 flash('Your request has been added to the processing queue. '
-                      'You will be notified by e-mail, when the report is ready.'
-                    )
+                      'You will be notified by e-mail, when the report is ready.')
                 # Put report order to queue
-                add_message_to_queue(occupation, email)
+                add_message_to_queue()
         else:
             # Asking to fill in all fields
             flash('Error: Please, enter occupation name and email into text fields')
