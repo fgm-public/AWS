@@ -1,0 +1,13 @@
+click
+Flask
+itsdangerous
+Jinja2
+MarkupSafe
+Werkzeug
+wtforms
+Flask-Mail
+Flask-WTF
+requests
+pymongo
+dnspython
+boto3
