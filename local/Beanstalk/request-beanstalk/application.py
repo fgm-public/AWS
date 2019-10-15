@@ -13,6 +13,8 @@ from wtforms import Form, TextField, TextAreaField, validators, StringField, Sub
 from json import dumps
 # MongoDB driver:
 from pymongo import MongoClient
+# Our MongoDB connection class:
+from mongocon import MongoConnection
 # Our beloved requests :) :
 import requests
 # And finally, our credentials:
@@ -37,10 +39,12 @@ class ReusableForm(Form):
 # for the provided occupation. If the report already exists,
 # the function returns a hyperlink, otherwise it puts the request order in MongoDB.
 def get_href_from_mongo(occupation, email):
-        # Connection to 'hh_reports' database object
-        client = MongoClient(mongo).hh_reports
-        # Connection to 'xlsx' collection object
-        collection = client['xlsx'] 
+    # MongoDB connection object    
+    client = MongoConnection()
+    # Use our connection object with context manager to handle connection
+    with client:
+        # Connection to 'xlsx' collection of 'hh_reports' database
+        collection = client.connection.hh_reports['xlsx']
         # Attempt to find an existing report
         report = collection.find_one({'occupation': occupation})
         if report:
@@ -52,10 +56,14 @@ def get_href_from_mongo(occupation, email):
 
 # This function adds a request order to MongoDB.
 def add_order_to_mongo(client, occupation, email):
-    # Connection to 'orders' collection object
-    collection = client['orders']
-    # Put request order
-    collection.insert({'customer': email, 'occupation': occupation})
+    # MongoDB connection object    
+    client = MongoConnection()
+    # Use our connection object with context manager to handle connection
+    with client:
+        # Connection to 'orders' collection of 'hh_reports' database
+        collection = client.connection.hh_reports['orders']
+        # Put request order
+        collection.insert({'customer': email, 'occupation': occupation})
 
 # This function queues a message to wake up the next lambda.
 def add_message_to_queue():

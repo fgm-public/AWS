@@ -14,6 +14,8 @@ from json import loads, dumps
 from pandas import DataFrame, ExcelWriter
 # MongoDB driver:
 from pymongo import MongoClient
+# Our MongoDB connection class:
+from mongocon import MongoConnection
 # Some mathematics:
 from statistics import median
 # Count items:
@@ -174,27 +176,30 @@ class VacancyAnalyzer:
     # This function gets an occupation name from MongoDB to request it from HH API.
     #---------------------------------------------------------------------------------------------------------
     def get_occupation_from_mongo(self):
-        # Connection to 'hh_reports' database object
-        client = MongoClient(mongo).hh_reports
-        # Connection to 'orders' collection object
-        collection = client['orders']
-        # Get number of last added order
-        number = collection.estimated_document_count()-1
-        # Get occupation name
-        raw_document = collection.find().skip(number)
-        occupation = raw_document[0].get('occupation')
-        self.occupation = occupation
+        # MongoDB connection object    
+        client = MongoConnection()
+        # Use our connection object with context manager to handle connection
+        with client:
+            # Connection to 'orders' collection of 'hh_reports' database
+            collection = client.connection.hh_reports['orders']
+            # Get number of last added order
+            number = collection.estimated_document_count()-1
+            # Get occupation name
+            raw_document = collection.find().skip(number)
+            occupation = raw_document[0].get('occupation')
+            self.occupation = occupation
 
     # This function gets vacancies from MongoDB
     #---------------------------------------------------------------------------------------------------------
     def get_vacancies_from_mongo(self):
-
-        client = MongoClient(mongo).hh_vacancies
-        collection = client[self.occupation]
-
-        self.vacancies = [document
-            for document in collection.find({})]
-
+        # MongoDB connection object    
+        client = MongoConnection()
+        # Use our connection object with context manager to handle connection
+        with client:
+            # Connection to 'orders' collection of 'hh_reports' database
+            collection = client.connection.hh_vacancies[self.occupation]
+            self.vacancies = [document
+                for document in collection.find({})]
 
     # This function stores analyze result into xlsx file,
     # then stores this file in AWS S3 object storage.
@@ -270,16 +275,19 @@ class VacancyAnalyzer:
     # This function stores xlsx report hyperlink into mongo
     #---------------------------------------------------------------------------------------------------------
     def add_href_to_mongo(self):
+        # MongoDB connection object    
+        client = MongoConnection()
+        # Use our connection object with context manager to handle connection
+        with client:
+            # Connection to 'xlsx' collection of 'hh_reports' database
+            collection = client.connection.hh_reports['xlsx']
         
-        client = MongoClient(mongo).hh_reports
-        collection = client['xlsx'] 
-        
-        occupations = [document.get('occupation')
-            for document in collection.find()]
-        
-        if self.occupation not in occupations:
-            collection.insert({'occupation': self.occupation,
-                               'report': self.report_url})
+            occupations = [document.get('occupation')
+                for document in collection.find()]
+            
+            if self.occupation not in occupations:
+                collection.insert({'occupation': self.occupation,
+                                'report': self.report_url})
 
 #---------------------------------------------------------------------------------------------------------
 #---Analyze-----------------------------------------------------------------------------------------------

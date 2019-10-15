@@ -4,6 +4,8 @@
 
 # MongoDB driver:
 from pymongo import MongoClient
+# Our MongoDB connection class:
+from mongocon import MongoConnection
 # Mail sender:
 from smtplib import SMTP_SSL
 # Some stuff to deserialize objects:v
@@ -15,27 +17,31 @@ from credentials import email, password, smtp_server, sqs, incoming_queue, mongo
 # to the xlsx report file, which stores in AWS S3 object storage,
 # for the provided occupation.
 def get_href_from_mongo(occupation):
-    # Connection to 'hh_reports' database object
-    client = MongoClient(mongo).hh_reports
-    # Connection to 'xlsx' collection object
-    collection = client['xlsx']
-    # Finds a suitable report
-    report = collection.find_one({'occupation': occupation})
-    return report.get('report')
+    # MongoDB connection object    
+    client = MongoConnection()
+    # Use our connection object with context manager to handle connection
+    with client:
+        # Connection to 'xlsx' collection of 'hh_reports' database
+        collection = client.connection.hh_reports['xlsx']
+        # Attempt to find an existing report
+        report = collection.find_one({'occupation': occupation})
+        return report.get('report')
 
 # This function gets an occupation name and email address from MongoDB.
 def get_email_from_mongo():
-    # Connection to 'hh_reports' database object
-    client = MongoClient(mongo).hh_reports
-    # Connection to 'orders' collection object
-    collection = client['orders']
-    # Gets serial number of last added order
-    number = collection.estimated_document_count()-1
-    # Get e-mail
-    raw_document = collection.find().skip(number)
-    email = raw_document[0].get('customer')
-    occupation = raw_document[0].get('occupation')
-    return email, occupation
+    # MongoDB connection object    
+    client = MongoConnection()
+    # Use our connection object with context manager to handle connection
+    with client:
+        # Connection to 'orders' collection of 'hh_reports' database
+        collection = client.connection.hh_reports['orders']
+        # Gets serial number of last added order
+        number = collection.estimated_document_count()-1
+        # Get e-mail
+        raw_document = collection.find().skip(number)
+        email = raw_document[0].get('customer')
+        occupation = raw_document[0].get('occupation')
+        return email, occupation
 
 # This function deletes a message from the queue,
 # which was sent by the previous lambda function.
