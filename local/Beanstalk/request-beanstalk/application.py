@@ -1,7 +1,8 @@
 
-# This application handle web form, that offers vacancies analysis report request.
-# Under the hood, it requests AWS S3 Object Storage for xslx report file,
-# and returns hyperlink to it, if finds. Else, adds the appropriate task to the queue.
+# This application handle web forms, that offers list of analysis reports,
+# vacancies analysis report request and resume analysis report request.
+# Under the hood, it requests AWS S3 Object Storage for xslx report files,
+# and returns all hyperlinks to it, which was find.
 # This is LOCAL version, intended fot testing purposes only!
 
 # Import required modules
@@ -18,7 +19,7 @@ from mongocon import MongoConnection
 # Our beloved requests :) :
 import requests
 # And finally, our credentials:
-from credentials import mongo, sqs, outgoing_queue, SECRET_KEY
+from credentials import mongo, sqs, outgoing_vqueue, outgoing_rqueue, SECRET_KEY
 
 # Initialize Flask web application instance itself
 app = Flask(__name__)
@@ -29,33 +30,48 @@ app.config.from_object(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
 
 # Define html form handler fields
-class ReusableForm(Form):
+class VacancyOrderForm(Form):
     # Occupation field with any text availability check
     occupation = TextField('Occupation:', validators=[validators.required()])
     # E-mail field with any text availability check
     email = TextField('Your e-mail:', validators=[validators.required()])
 
-# This function tries to get a hyperlink to the xlsx report file from MongoDB
-# for the provided occupation. If the report already exists,
-# the function returns a hyperlink, otherwise it puts the request order in MongoDB.
-def get_href_from_mongo(occupation, email):
+# Define html form handler fields
+class ResumeOrderForm(Form):
+    # Search Criteria field with any text availability check
+    scriteria = TextField('Criteria:', validators=[validators.required()])
+    # E-mail field with any text availability check
+    email = TextField('Your e-mail:', validators=[validators.required()])
+
+# Success messages on order
+message = ( 'Ваш запрос был успешно добавлен в очередь на обработку! '
+            'Когда сбор данных и генерация отчёта будут завершены, '
+            'вы получите уведомление на указанный вами адрес.' )
+thanks = 'Спасибо за пользование сервисом!'
+# Form validation error message on order
+error = 'Пожалуйста, заполните все имеющиеся поля формы.'
+
+# This function tries to get a hyperlinks to the xlsx report files from MongoDB
+def get_hrefs_from_mongo(report_type):
     # MongoDB connection object    
     client = MongoConnection()
     # Use our connection object with context manager to handle connection
     with client:
         # Connection to 'xlsx' collection of 'hh_reports' database
         collection = client.connection.hh_reports['xlsx']
-        # Attempt to find an existing report
-        report = collection.find_one({'occupation': occupation})
-        if report:
-            # Return hyperlink
-            return report.get('report')
-        else:
-            add_order_to_mongo(client, occupation, email)
-            return None
+        # Attempt to find all reports
+        raw_reports = collection.find({})
+        reports = [report for report in raw_reports]
+        # Separate reports by its types
+        response = {item[report_type]:item['report']
+            for item in reports
+                if report_type in item.keys()}
+        if response:
+            # Return hyperlinks
+            return response
 
-# This function adds a request order to MongoDB.
-def add_order_to_mongo(client, occupation, email):
+# This function adds a request or parse order to MongoDB.
+def add_order_to_mongo(email, occupation=None, criteria=None):
     # MongoDB connection object    
     client = MongoConnection()
     # Use our connection object with context manager to handle connection
@@ -63,49 +79,89 @@ def add_order_to_mongo(client, occupation, email):
         # Connection to 'orders' collection of 'hh_reports' database
         collection = client.connection.hh_reports['orders']
         # Put request order
-        collection.insert({'customer': email, 'occupation': occupation})
+        if occupation:
+            # If vacancy request
+            collection.insert({'customer': email, 'occupation': occupation})
+        else:
+            # If resume request
+            collection.insert({'customer': email, 'criteria': criteria})
 
 # This function queues a message to wake up the next lambda.
-def add_message_to_queue():
+def add_message_to_queue(queue):
     # Create message (dict object)
     raw_message = {"Wake": 'Up'}
     # Serialize message object, because queue requires string messages
     message = dumps(raw_message)
-    # Put it to queue
+    # Put it to appropriate queue
     sqs.send_message(
-            QueueUrl=outgoing_queue,
+            QueueUrl=queue,
             MessageBody=message)
 
-# Default handler function which will start when our root web app Url will be visited
+# URL binding
 @app.route("/", methods=['GET', 'POST'])
-def _request():
-    # Html form handler
-    form = ReusableForm(request.form)
-    # Request html form data filled by user
+# Default handler function which will start when our root web app Url will be visited
+def _index():
+    # Trying to get report Urls
+    vacancy_reports = get_hrefs_from_mongo('occupation')
+    resume_reports = get_hrefs_from_mongo('scriteria')
+    # Form lists of URLs
+    vreports = [Markup(f'<a href="{value}" class="links">{key}</a> <br>')
+        for key, value in vacancy_reports.items()]
+    rreports = [Markup(f'<a href="{value}" class="links">{key}</a> <br>')
+        for key, value in resume_reports.items()]
+    # Render index html page template with our report URLs data
+    return render_template('index.html',
+                            vreports=vreports,
+                            rreports=rreports)
+
+# URL binding
+@app.route("/vacancy", methods=['GET', 'POST'])
+# Function which handles vacancy order page
+def _vacancy_request():
+    # Define form handler
+    form = VacancyOrderForm(request.form)
+    # Request form data filled by user
     if request.method == 'POST':
         occupation = request.form['occupation']
         email = request.form['email']
         # Validation check 
         if form.validate():
-            # Trying to get report Url
-            report_url = get_href_from_mongo(occupation, email)
-            if report_url:
-                # Create response
-                response = (f'Your report is ready! '
-                            f'<a href="{report_url}" class="alert-link">Click here</a> '
-                            f'to download it!')
-                # Put it to user
-                flash(Markup(response))
-            else:
-                # Reassure user
-                flash('Your request has been added to the processing queue. '
-                      'You will be notified by e-mail, when the report is ready.')
-                # Put report order to queue
-                add_message_to_queue()
+            # Reassure user
+            flash(message)
+            flash(thanks)
+            # Put request order to mongo
+            add_order_to_mongo(email, occupation=occupation)
+##add_message_to_queue(outgoing_vqueue)
         else:
             # Asking to fill in all fields
-            flash('Error: Please, enter occupation name and email into text fields')
-    return render_template('request.html', form=form)
+            flash(error)
+    # Render vacancy order html page template with our order form
+    return render_template('vrequest.html', form=form)
+
+# URL binding
+@app.route("/resume", methods=['GET', 'POST'])
+# Function which handles resume order page
+def _resume_request():
+    # Define form handler
+    form = ResumeOrderForm(request.form)
+    # Request html form data filled by user
+    if request.method == 'POST':
+        criteria = request.form['scriteria']
+        email = request.form['email']
+        # Validation check 
+        if form.validate():
+            # Reassure user
+            flash(message)
+            flash(thanks)
+            # Put parse order to mongo
+            add_order_to_mongo(email, criteria=criteria)
+##add_message_to_queue(outgoing_rqueue)
+        else:
+            # Asking to fill in all fields
+            flash(error)
+    # Render resume order html page template with our order form
+    return render_template('rrequest.html', form=form)
+
 
 # Checks importing issue
 if __name__ == "__main__":

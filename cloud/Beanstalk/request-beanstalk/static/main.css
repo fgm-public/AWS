@@ -1,0 +1,57 @@
+
+.logo {
+  float:left; 
+  max-width: 177px; 
+  max-height: 57px;
+}
+
+.header{
+  font-family: arial;
+  font-style: bold; 
+  font-size: 150%;
+}
+
+.description { 
+  font-family: arial; 
+  font-style: bold; 
+  color: white;
+  font-size: 150%;
+}
+
+.listing {
+  font-family: arial;
+  font-style: bold;
+  font-size: 125%;
+}
+
+.order{
+  font-family: arial; 
+  font-style: bold; 
+  font-size: 175%;
+}
+
+.links{
+  color: grey;
+}
+
+body{
+  background-repeat: no-repeat;
+  background-position: left 175px;
+  background-image:url(homebg1.jpg);
+  font-family: arial;
+  font-weight: bold;
+  min-height:100%;
+}   
+
+.footer {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background-color: rgb(0, 0, 0);
+  color: white;
+  text-align: center;
+  font-family: arial;
+  font-style: bold;
+  font-size: 100%;
+}

@@ -1,0 +1,116 @@
+<html>
+  <head>
+    <title>
+      Анализ рынка труда
+    </title>
+    <link rel="stylesheet" media="screen" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/main.css">
+    <link rel="icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  </head>
+  <body background="/static/homebg1.jpg">
+    <div class="container">
+      <br>
+      <br>
+      <center>
+        <a href="/">
+          <img class='logo' src="/static/neti.png"/>
+        </a>
+        <div class='header'>
+          <center>
+            Факультет бизнеса
+          </center>
+          <center>
+            Кафедра экономической информатики
+          </center>
+        </div>
+      </center>
+    </div>
+    <br>
+    <br>
+    <br>
+    <br>
+    <div class='description'>
+        <center>
+          Анализ рынка труда
+        </center>
+        <br>
+        <center>
+          На данном сайте представлены готовые аналитические отчёты по актуальному состоянию рынка труда. 
+          Отчёты сделаны на основе автоматизированного сбора данных с HR порталов и публичных API. 
+          Если вы не нашли требующийся вам отчёт, то вы можете разместить заявку на него. 
+          Для этого нажмите кнопку 'Заказать отчёт' и заполните форму.
+        </center>
+        <br>
+    </div>
+    <br>
+    <br>
+    <br>
+    <br>
+    <div class="container">
+      <div class="row align-items-center justify-content-center">
+        <div class="col-sm align-self-start justify-content-center">
+          <center>
+            <div class='listing'>
+              Аналитические отчёты по вакансиям доступные на данный момент:
+            </div>
+            <br>
+            <br>
+            {% for hyperlink in vreports %}
+              {{ hyperlink }}
+            {% endfor %}
+          </center>
+          <br>
+          <br>
+          <br>
+        </div>
+        <div class="col-sm align-self-start justify-content-center">
+          <center>
+            <div class='listing'>
+              Аналитические отчёты по резюме доступные на данный момент:
+            </div>
+            <br>
+            <br>
+            {% for hyperlink in rreports %}
+              {{ hyperlink }}
+            {% endfor %}
+          </center>
+          <br>
+          <br>
+          <br>
+        </div>
+      </div>
+      <div class="row align-items-center justify-content-center">
+        <div class="col-sm align-self-start justify-content-center">
+          <center>
+              <button onclick="location.href='/vacancy'" type="button" class="btn btn-success">
+                Заказать отчёт
+              </button>
+          </center>
+        </div>
+        <div class="col-sm align-self-start justify-content-center">
+          <center>
+            <button onclick="location.href='/resume'" type="button" class="btn btn-success">
+              Заказать отчёт
+            </button>
+          </center>
+        </div>
+      </div>
+    </div>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+  </body>
+  <div class="footer">
+    <br>
+    Данное приложение разработано в рамках реализации 
+    <a class='links' href="https://project-study.nstu.ru">проектного подхода к обучению</a> в НГТУ
+    <br>
+    <br>
+  </div>
+</html>

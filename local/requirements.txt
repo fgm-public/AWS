@@ -9,3 +9,4 @@ Flask-WTF>=0.14.2
 WTForms>=2.2.1
 pandas>=0.24.2
 boto3>=1.9
+lxml

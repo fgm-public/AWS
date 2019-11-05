@@ -24,8 +24,10 @@ sqs = boto3.client('sqs',
         aws_secret_access_key='X1xX1xX1xX1xX1xX1xX1xX1xX1xX1xX1xX1xX1xX'
     )
 
-# AWS SQS queue instance
-outgoing_queue = 'https://sqs.us-east-2.amazonaws.com/123456789010/myqueue'
+# AWS SQS queue instances
+outgoing_vqueue = 'https://sqs.us-east-2.amazonaws.com/123456789010/myvqueue'
+
+outgoing_rqueue = 'https://sqs.us-east-2.amazonaws.com/123456789010/myrqueue'
 
 # Flask secret key for security purposes
 SECRET_KEY = 'X2xX2xX2xX2xX2xX2xX2xX2xX2xX2xX2xX'
