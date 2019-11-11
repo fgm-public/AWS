@@ -34,9 +34,28 @@
   color: grey;
 }
 
+a:link {
+  color: grey;
+}
+
+/* visited link */
+a:visited {
+  color: darkred;
+}
+
+/* mouse over link */
+a:hover {
+  color: green;
+}
+
+/* selected link */
+a:active {
+  color: grey;
+}
+
 body{
   background-repeat: no-repeat;
-  background-position: left 175px;
+  background-position: center 175px;
   background-image:url(homebg1.jpg);
   font-family: arial;
   font-weight: bold;

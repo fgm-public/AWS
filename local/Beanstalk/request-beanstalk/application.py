@@ -1,9 +1,14 @@
 
+###############################################################################
+
 # This application handle web forms, that offers list of analysis reports,
 # vacancies analysis report request and resume analysis report request.
 # Under the hood, it requests AWS S3 Object Storage for xslx report files,
 # and returns all hyperlinks to it, which was find.
-# This is LOCAL version, intended fot testing purposes only!
+
+###############################################################################
+#######   This is LOCAL version, intended fot testing purposes only!   ########
+###############################################################################
 
 # Import required modules
 # Flask python web framework itself:
@@ -12,14 +17,16 @@ from flask import Flask, render_template, flash, request, Markup
 from wtforms import Form, TextField, TextAreaField, validators, StringField, SubmitField
 # Some stuff to serialize objects:
 from json import dumps
+# Mail sender:
+from smtplib import SMTP_SSL
 # MongoDB driver:
 from pymongo import MongoClient
-# Our MongoDB connection class:
-from mongocon import MongoConnection
+# Our send mail class:
+from mailsender import MailSender
 # Our beloved requests :) :
 import requests
 # And finally, our credentials:
-from credentials import mongo, sqs, outgoing_vqueue, outgoing_rqueue, SECRET_KEY
+from credentials import mongo, sqs, outgoing_vqueue, outgoing_rqueue, SECRET_KEY, mail_creds
 
 # Initialize Flask web application instance itself
 app = Flask(__name__)
@@ -53,12 +60,10 @@ error = 'Пожалуйста, заполните все имеющиеся по
 
 # This function tries to get a hyperlinks to the xlsx report files from MongoDB
 def get_hrefs_from_mongo(report_type):
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
         # Connection to 'xlsx' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['xlsx']
+        collection = mongodb.hh_reports['xlsx']
         # Attempt to find all reports
         raw_reports = collection.find({})
         reports = [report for report in raw_reports]
@@ -72,19 +77,35 @@ def get_hrefs_from_mongo(report_type):
 
 # This function adds a request or parse order to MongoDB.
 def add_order_to_mongo(email, occupation=None, criteria=None):
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
         # Connection to 'orders' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['orders']
+        collection = mongodb.hh_reports['orders']
         # Put request order
         if occupation:
             # If vacancy request
-            collection.insert({'customer': email, 'occupation': occupation})
+            order = {'customer': email, 'occupation': occupation}
+            # Add order to MongoDB
+            collection.insert(order)
+            # Send mail notification
+            subject = 'Laboranalysis application gets the new order'
+            # To admin, with above subject and 'order' body
+            mail = MailSender( [mail_creds['admin']], 
+                                subject, 
+                                str(order) )
+            mail.send_email()
         else:
             # If resume request
-            collection.insert({'customer': email, 'criteria': criteria})
+            order = {'customer': email, 'criteria': criteria}
+            # Add order to MongoDB
+            collection.insert(order)
+            # Send mail notification
+            subject = 'Laboranalysis application gets the new order'
+            # To admin, with above subject and 'order' body
+            mail = MailSender( [mail_creds['admin']], 
+                                subject, 
+                                str(order) )
+            mail.send_email()
 
 # This function queues a message to wake up the next lambda.
 def add_message_to_queue(queue):

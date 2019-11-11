@@ -1,7 +1,31 @@
 
+###############################################################################
+##########################   Ethical disclaimer   #############################
+###############################################################################
+
+# In this application, we work with the portal and API of the headhunter.ru company.
+# We are very grateful to headhunter.ru company for the beautiful portal 
+# and excellently-designed well-documented API, programming with which was a pure pleasure.
+# We are aware of the complexity of the development and maintenance of such services 
+# and such a business as a whole. We are also fully aware that specialized databases 
+# are one of the main assets of the company.
+#
+# In connection with the foregoing, we should in no case forget that:
+#
+#      THIS APPLICATION WAS CREATED EXCLUSIVELY FOR EDUCATIONAL PURPOSES
+#      AND COMPLETELY EXCLUDES THE POSSIBILITY OF ANY BUSINESS USE.
+#
+# Also remember that the company itself provides analytical reporting services 
+# that you can always use and this will be the best choice.
+
+###############################################################################
+
 # This function collects vacancies from the provider (hh.ru),
 # and stores them to the database (MongoDB).
-# This is CLOUD version, intended for production deployment.
+
+###############################################################################
+#######   This is CLOUD version, intended for production deployment.   ########
+###############################################################################
 
 # Some stuff to deserialize objects:
 from json import loads, dumps
@@ -37,16 +61,27 @@ def add_message_to_queue():
 
 # This function gets an occupation name from MongoDB to request it from HH API.
 def get_occupation_from_mongo():
-    # Connection to 'hh_reports' database object
-    client = MongoClient(mongo).hh_reports
-    # Connection to 'orders' collection object
-    collection = client['orders']
-    # Get number of last added order
-    number = collection.estimated_document_count()-1
-    # Get occupation name
-    raw_document = collection.find().skip(number)
-    occupation = raw_document[0].get('occupation')
-    return occupation
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
+        # Connection to 'orders' collection of 'hh_reports' database
+        collection = mongodb.hh_reports['orders']
+        # Get number of last added order
+        number = collection.estimated_document_count()-1
+        # Get occupation name
+        raw_document = collection.find().skip(number)
+        occupation = raw_document[0].get('occupation')
+        return occupation
+
+# This function stores retrieved vacancies to MongoDB
+def store_vacancies_to_mongo(occupation, vacancies):
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
+        # Open proper collection in hh_vacancies database
+        collection = mongodb.hh_vacancies[occupation]
+        # Write data into collection
+        insert_result = collection.insert_many(vacancies)
+        # Return insertion result
+        return insert_result
 
 # A BRIEF version of the request to API function which retrieve small batch,
 # because of requests limitations.
@@ -60,7 +95,7 @@ def vacancy_retriever_brief(occupation):
                 'per_page': 10,
                 'page': 0,
                 'period': 1
-                }
+            }
     brief_vacancies = []
     vacancies = []
     # Request to API
@@ -80,20 +115,16 @@ def vacancy_retriever_brief(occupation):
 
 # Main lamba function
 def lambda_handler(event, context):
-    # Deletes a 'wake-up' message from the queue
-    delete_message_from_queue()
     # Retrieve the occupation name
-    ##occupation = get_occupation_from_queue()
+##occupation = get_occupation_from_queue()
     occupation = get_occupation_from_mongo()
-    # Open hh_vacancies database
-    client = MongoClient(mongo).hh_vacancies
     # Usually, we use a BRIEF version of the function,
     # for time-saving purposes
     vacancies = vacancy_retriever_brief(occupation)
-    # Open proper collection
-    collection = client[occupation]
-    # Write data into collection
-    insert_result = collection.insert_many(vacancies)
+    # Store retrieved vacancies to MongoDB
+    insert_result = store_vacancies_to_mongo(occupation, vacancies)
+    # Deletes a 'wake-up' message from the queue
+    delete_message_from_queue()
     # Sends a 'wake-up' message to the queue for next lambda
     add_message_to_queue()
 

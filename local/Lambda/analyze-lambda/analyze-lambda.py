@@ -1,8 +1,35 @@
 
+###############################################################################
+##########################   Ethical disclaimer   #############################
+###############################################################################
+
+# In this application, we work with the portal and API of the headhunter.ru company.
+# We are very grateful to headhunter.ru company for the beautiful portal 
+# and excellently-designed well-documented API, programming with which was a pure pleasure.
+# We are aware of the complexity of the development and maintenance of such services 
+# and such a business as a whole. We are also fully aware that specialized databases 
+# are one of the main assets of the company.
+#
+# In connection with the foregoing, we should in no case forget that:
+#
+#      THIS APPLICATION WAS CREATED EXCLUSIVELY FOR EDUCATIONAL PURPOSES
+#      AND COMPLETELY EXCLUDES THE POSSIBILITY OF ANY BUSINESS USE.
+#
+# Also remember that the company itself provides analytical reporting services 
+# that you can always use and this will be the best choice.
+
+###############################################################################
+
 # This function analyzes vacancies from the database (MongoDB),
 # generates xlsx report and upload it to the AWS S3 Storage.
 # Then adds xlsx report public hyperlink to the database (MongoDB).
-# This is LOCAL version, intended fot testing purposes only!
+
+###############################################################################
+#######   This is LOCAL version, intended fot testing purposes only!   ########
+###############################################################################
+
+#---Imports--------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 # Output stream for saving report files:
 from io import BytesIO
@@ -14,8 +41,6 @@ from json import loads, dumps
 from pandas import DataFrame, ExcelWriter
 # MongoDB driver:
 from pymongo import MongoClient
-# Our MongoDB connection class:
-from mongocon import MongoConnection
 # Some mathematics:
 from statistics import median
 # Count items:
@@ -27,13 +52,15 @@ from filtervocabulary import vocabulary
 # And finally, our credentials:
 from credentials import s3, mongo, sqs
 
+#---Class----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 class VacancyAnalyzer:
     ''' Сlass is designed to analyze information about vacancies'''
 
-#---------------------------------------------------------------------------------------------------------
-#---Initializations---------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Initializations------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     def __init__(self): ##, occupation):
 
@@ -143,14 +170,15 @@ class VacancyAnalyzer:
         f"'{self.occupation}' occupation")
 
 
-#---------------------------------------------------------------------------------------------------------
-#---Public service methods--------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Public service methods-----------------------------------------------------
+#------------------------------------------------------------------------------
 
-    # This function deletes a message from the queue,
-    # which was sent by the previous lambda function.
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def delete_message_from_queue(self):
+        '''This function deletes a message from the queue,
+        which was sent by the previous lambda function.
+        '''
         # Receive message and provide 'VisibilityTimeout' to queue
         raw_message = sqs.receive_message(QueueUrl=incoming_queue,
                                           VisibilityTimeout=60)
@@ -160,9 +188,10 @@ class VacancyAnalyzer:
         sqs.delete_message(QueueUrl=incoming_queue,
                            ReceiptHandle=receipt_handle)
 
-    # This function queues a message to wake up the next lambda.
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def add_message_to_queue(self):
+        '''This function queues a message to wake up the next lambda.
+        '''
         # Create message (dict object)
         raw_message = {"Wake": 'Up'}
         # Serialize message object, because queue requires string messages
@@ -173,15 +202,15 @@ class VacancyAnalyzer:
                 MessageBody=message,
             )
 
-    # This function gets an occupation name from MongoDB to request it from HH API.
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def get_occupation_from_mongo(self):
-        # MongoDB connection object    
-        client = MongoConnection()
-        # Use our connection object with context manager to handle connection
-        with client:
+        '''This function gets an occupation name 
+        from MongoDB to request it from HH API.
+        '''
+        # Instantiate MongoDB connection context
+        with MongoClient(mongo) as mongodb:
             # Connection to 'orders' collection of 'hh_reports' database
-            collection = client.connection.hh_reports['orders']
+            collection = mongodb.hh_reports['orders']
             # Get number of last added order
             number = collection.estimated_document_count()-1
             # Get occupation name
@@ -189,33 +218,50 @@ class VacancyAnalyzer:
             occupation = raw_document[0].get('occupation')
             self.occupation = occupation
 
-    # This function gets vacancies from MongoDB
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def get_vacancies_from_mongo(self):
-        # MongoDB connection object    
-        client = MongoConnection()
-        # Use our connection object with context manager to handle connection
-        with client:
+        '''This function gets vacancies from MongoDB
+        '''
+        # Instantiate MongoDB connection context
+        with MongoClient(mongo) as mongodb:    
             # Connection to 'orders' collection of 'hh_reports' database
-            collection = client.connection.hh_vacancies[self.occupation]
+            collection = mongodb.hh_vacancies[self.occupation]
             self.vacancies = [document
                 for document in collection.find({})]
 
-    # This function stores analyze result into xlsx file,
-    # then stores this file in AWS S3 object storage.
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def store_report_to_s3(self):
-
-        def form_sheet(data, columns, name):
+        '''This function stores analyze result into xlsx file,
+        then stores this file in AWS S3 object storage.
+        '''
+        def form_sheet(data, columns, name, a_width, b_width):
             # Defines sheet structure
-            sheet = DataFrame(data, columns=columns)
+            sheet = pandas.DataFrame(data, columns=columns)
             # Add sheet to xlsx document
             sheet.to_excel(writer, name, index=False)
-        
+            worksheet = writer.sheets[name]
+            worksheet.set_column('A:A', a_width)
+            worksheet.set_column('B:B', b_width)
+            worksheet.conditional_format('A2:A11', {'type': '3_color_scale'})
+
+        def form_chart(data, name, amount, type, code):
+            workbook = writer.book
+            worksheet = writer.sheets[name]
+            chart = workbook.add_chart({'type': type})
+            chart.add_series({
+                'categories': f"='{name}'!$A$2:$A${amount}",
+                'values':     f"='{name}'!$B$2:$B${amount}",
+            })
+            if type != 'pie':
+                chart.set_x_axis({'name': data[0], 'num_font':  {'rotation': 45}})
+                chart.set_y_axis({'name': data[1], 'major_gridlines': {'visible': False}})
+                chart.set_legend({'position': 'none'})
+            worksheet.insert_chart(code, chart)
+
         # Xlsx file structure
         table_structure = {
             'Должности': ['Название должности', 'Количество вакансий'],
-            'Ключевые навыки': ['Ключевые навыки (тэги)', 'Вакансий'],
+            'Ключевые навыки': ['Ключевые навыки', 'Вакансий'],
             'Опыт': ['Требуемый опыт', 'Вакансий'],        
             'Технологии': ['Продукты|Технологии', 'Вакансий'],        
             'Работодатели': ['Работодатель', 'Ссылка'],
@@ -223,7 +269,7 @@ class VacancyAnalyzer:
             'Профобласти': ['Профобласть', 'Вакансий'],
             'Специализации': ['Специализация', 'Вакансий'],
             'Группы': ['Диапазон', 'Вакансий'],
-            'Зарплата': ['Средняя зарплата', 'Медианная зарплата', 'Модальная зарплата'],
+            'Зарплата': ['Зарплата', 'Рублей'],
         }
         
         # Defines output stream
@@ -231,29 +277,124 @@ class VacancyAnalyzer:
         # Defines pandas xlsx writer and saves xlsx file into output stream
         with ExcelWriter(output) as writer:
 
-            form_sheet(self.vacancy_names, table_structure['Должности'], 'Должности')
-            form_sheet(self.skills_all, table_structure['Ключевые навыки'],'Ключевые навыки')
-            form_sheet(self.keywords_all, table_structure['Технологии'], 'Технологии')
-            form_sheet(self.regions, table_structure['Регионы'], 'Регионы')
-            form_sheet(self.experience, table_structure['Опыт'], 'Опыт')
-            form_sheet(self.employers_brief.items(), table_structure['Работодатели'], 'Работодатели')
-            form_sheet(self.profareas, table_structure['Профобласти'], 'Профобласти')
-            form_sheet(self.profareas_granular, table_structure['Специализации'], 'Специализации')
-            form_sheet(self.salary_groups.items(), table_structure['Группы'], 'Зарплатные группы')
-            form_sheet([(self.average_salary, self.median_salary, self.modal_salary),],
-                    table_structure['Зарплата'], 'Зарплата')
+            try:
+                form_sheet( self.vacancy_names, 
+                            table_structure['Должности'],
+                            'Должности', 60, 25 )
+                form_chart( table_structure['Должности'],
+                            'Должности', '11', 'column', 'D2' )
+            except:
+                pass
+
+            try:
+                form_sheet( self.skills_all, 
+                            table_structure['Ключевые навыки'],
+                            'Ключевые навыки', 50, 20 )
+                form_chart( table_structure['Ключевые навыки'], 
+                            'Ключевые навыки', '11', 'column', 'D2' )
+            except:
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Ключевые навыки', 35, 15 )
+
+            try:
+                form_sheet( self.keywords_all, 
+                            table_structure['Технологии'], 
+                            'Технологии', 30, 20 )
+                form_chart( table_structure['Технологии'], 
+                            'Технологии', '11', 'column', 'D2' )
+            except:
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Технологии', 35, 15 )
+        
+            try:
+                form_sheet( self.regions, 
+                            table_structure['Регионы'], 
+                            'Регионы', 35, 20 )
+                form_chart( table_structure['Регионы'], 
+                            'Регионы', '11', 'column', 'D2')
+            except:
+                pass
+
+            try:
+                form_sheet( self.experience, 
+                            table_structure['Опыт'], 
+                            'Опыт', 30, 20 )
+                form_chart( table_structure['Опыт'], 
+                            'Опыт', '5', 'pie', 'C3' )
+            except:
+                pass
+        
+            try:            
+                form_sheet( self.employers_brief.items(), 
+                            table_structure['Работодатели'], 
+                            'Работодатели', 50, 35 )
+            except:
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Работодатели', 35, 15)
+            
+            try:
+                form_sheet( self.profareas, 
+                            table_structure['Профобласти'], 
+                            'Профобласти', 55, 20 )
+                form_chart( table_structure['Профобласти'], 
+                            'Профобласти', '11', 'column', 'D2' )
+            except:
+                pass
+    
+            try:
+                form_sheet( self.profareas_granular, 
+                            table_structure['Специализации'], 
+                            'Специализации', 45, 20 )
+                form_chart( table_structure['Специализации'], 
+                            'Специализации', '11', 'column', 'D2' )
+            except:
+                pass
+            
+            try:
+                form_sheet( self.salary_groups.items(), 
+                            table_structure['Группы'], 
+                            'Зарплатные группы', 25, 20 )
+                form_chart( table_structure['Группы'], 
+                            'Зарплатные группы', '11', 'column', 'D2' )
+            except:
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Зарплатные группы', 35, 15 )
+
+            try:
+                form_sheet( self.salaries, 
+                            table_structure['Зарплата'], 
+                            'Зарплата', 25, 20 )
+            except:
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Зарплата', 35, 15 )
 
             for criteria in vocabulary['Знания']:
-                form_sheet(set(self._by_word_extractor(criteria)),
-                        [criteria.capitalize()],
-                        criteria.capitalize())
+                try:
+                    form_sheet(set(self._by_word_extractor(criteria)),
+                            [criteria.capitalize()],
+                            criteria.capitalize(), 100, 30)
+                except:
+                    pass
 
             for criteria in self.description_elements_top:
-                form_sheet(set(self.description_elements_top.get(criteria)),
-                        [criteria.capitalize()],
-                        criteria.capitalize())
-            
-            form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов')
+                try:
+                    form_sheet(set(self.description_elements_top.get(criteria)),
+                            [criteria.capitalize()],
+                            criteria.capitalize(), 100, 30)
+                except:
+                    pass
+
+            try:
+                form_sheet( self.wordbags_all, 
+                            ['Слово', 'Вхождений'], 
+                            'Мешок слов', 25, 20 )
+            except:
+                pass
 
         # Put file content into 'data'
         data = output.getvalue() #
@@ -271,16 +412,14 @@ class VacancyAnalyzer:
         self.report_url = (f"https://xlsx-reports.s3.amazonaws.com/"
                            f"{self.occupation}.xlsx")
 
-
-    # This function stores xlsx report hyperlink into mongo
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def add_href_to_mongo(self):
-        # MongoDB connection object    
-        client = MongoConnection()
-        # Use our connection object with context manager to handle connection
-        with client:
+        '''This function stores xlsx report hyperlink into mongo
+        '''
+        # Instantiate MongoDB connection context
+        with MongoClient(mongo) as mongodb:    
             # Connection to 'xlsx' collection of 'hh_reports' database
-            collection = client.connection.hh_reports['xlsx']
+            collection = mongodb.hh_reports['xlsx']
         
             occupations = [document.get('occupation')
                 for document in collection.find()]
@@ -289,9 +428,9 @@ class VacancyAnalyzer:
                 collection.insert({'occupation': self.occupation,
                                 'report': self.report_url})
 
-#---------------------------------------------------------------------------------------------------------
-#---Analyze-----------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Analyze--------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Call all analyze methods                        
     def analyze(self):
@@ -311,12 +450,12 @@ class VacancyAnalyzer:
         self._salary_calculator()
         self._employers_collector()
 
-#---------------------------------------------------------------------------------------------------------
-#---Collectors--------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Collectors-----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Collect key skills
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _skills_collector(self):
         
         raw_key_skills = [vacancy.get('key_skills')
@@ -345,7 +484,7 @@ class VacancyAnalyzer:
 
 
     # Collect required work experience from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _experience_collector(self):
 
         raw_experience = [full_vacancy.get('experience').get('name')
@@ -362,7 +501,7 @@ class VacancyAnalyzer:
 
 
     # Collect vacancy names
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _vacancy_names_collector(self):
 
         vacancy_names = [vacancy.get('name').lower()
@@ -379,7 +518,7 @@ class VacancyAnalyzer:
 
 
     # Collect specialization areas from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _prof_areas_collector(self):
 
         ##raw_area_ids = [categories.get('id')
@@ -425,7 +564,7 @@ class VacancyAnalyzer:
 
     
     # Collect creation dates from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _creation_dates_collector(self):
 
         raw_create_dates = [vacancy.get('created_at')
@@ -437,7 +576,7 @@ class VacancyAnalyzer:
 
     
     # Collect employers
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _employers_collector(self):
 
         self.employers_full = [vacancy.get('employer')
@@ -449,7 +588,7 @@ class VacancyAnalyzer:
 
 
     # Collect regions
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _regions_collector(self):
 
         regions = [vacancy.get('area').get('name')
@@ -465,13 +604,14 @@ class VacancyAnalyzer:
                                     reverse=True)
 
 
-#---------------------------------------------------------------------------------------------------------
-#---Extractors--------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Extractors-----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-    # Wordbags formed from self.description_sections_top, which in turn is
-    # Top of 'strong's' dictionary formed from lots of batches of different vacancies
-    #---------------------------------------------------------------------------------------------------------
+    # Wordbags formed from self.description_sections_top,
+    # which in turn is Top of 'strong's' dictionary 
+    # formed from lots of batches of different vacancies
+    #--------------------------------------------------------------------------
     def _wordbags_extractor(self):
 
         def extract_by_criteria(criteria):
@@ -508,7 +648,7 @@ class VacancyAnalyzer:
                                    reverse=True)
 
     # Extract all english words from vacancy desriptions
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _keywords_extractor(self):
 
         # Texts list from vacancy descriptions
@@ -540,7 +680,7 @@ class VacancyAnalyzer:
 
 
     # Extract child elements from all subject headings (html 'strongs')
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _description_elements_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -558,7 +698,7 @@ class VacancyAnalyzer:
 
     
     # Extract multiple different things from vacancy description bodies
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _description_sections_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -627,8 +767,9 @@ class VacancyAnalyzer:
                             pass
         
        
-    # Get python list of list 'description_sections_top' filtered by custom 'filter_vocabulary' key
-    #---------------------------------------------------------------------------------------------------------
+    # Get python list of list 'description_sections_top' 
+    # filtered by custom 'filter_vocabulary' key
+    #--------------------------------------------------------------------------
 
     # Dirty, but fast version
     ##def _by_word_extractor(self, criteria):
@@ -652,12 +793,13 @@ class VacancyAnalyzer:
         
         return sorted(result, key=len)
         
-#---------------------------------------------------------------------------------------------------------
-#---Calculators-------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Calculators----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-    # Calculate average, median, modal salaries and group salaries into number of clusters
-    #-----------------------------------------------------------------------------------------------------
+    # Calculate average, median, modal salaries
+    # and group salaries into number of clusters
+    #--------------------------------------------------------------------------
     def _salary_calculator(self):
         
         def _get_salary_group(salary):
@@ -736,12 +878,12 @@ class VacancyAnalyzer:
             if salary == max(self.salary_groups.values()):
                 self.modal_salary = group
 
-#---------------------------------------------------------------------------------------------------------
-#---Misc--------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Misc-----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Remove dubplicates in vacancies list
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _duplicate_vacancies_remover(self):
         
         unique_vacancies = []
@@ -752,26 +894,26 @@ class VacancyAnalyzer:
 
         self.vacancies = unique_vacancies
 
-
     # Count unique vacancies in vacancies list
-    #---------------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _unique_counter(self):
 
         self.unique = len({vacancy.get('id')
             for vacancy in self.vacancies})
 
-#---------------------------------------------------------------------------------------------------------
-#---Main--------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
 
+#---Main-----------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
+# Checks importing issue
 if __name__ == "__main__":
-    
+    # Start test
     from vacancy_analyzer import VacancyAnalyzer
-    v = VacancyAnalyzer()
-    v.delete_message_from_queue()
-    v.get_occupation_from_mongo()
-    v.get_vacancies_from_mongo()
-    v.analyze()
-    v.store_report_to_s3()
-    v.add_href_to_mongo()
-    v.add_message_to_queue()
+    vacancies = VacancyAnalyzer()
+    vacancies.delete_message_from_queue()
+    vacancies.get_occupation_from_mongo()
+    vacancies.get_vacancies_from_mongo()
+    vacancies.analyze()
+    vacancies.store_report_to_s3()
+    vacancies.add_href_to_mongo()
+    vacancies.add_message_to_queue()

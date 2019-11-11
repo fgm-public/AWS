@@ -3,9 +3,10 @@
 import boto3
 
 # E-mail credentials
-email = 'mail@.yandex.ru'
-password = 'xxx'
-smtp_server = 'smtp.yandex.com'
+mail_creds = { 'admin': 'mail@.gmail.com',
+               'source': 'mail@.yandex.ru',
+               'password': 'xxx',
+               'smtp_server': 'smtp.yandex.com', }
 
 # AWS SQS queue access credentials
 sqs = boto3.client('sqs',

@@ -1,40 +1,39 @@
 
+###############################################################################
+
 # This function sends a freshly generated report hyperlink to customer.
-# This is LOCAL version, intended fot testing purposes only!
+
+###############################################################################
+#######   This is LOCAL version, intended fot testing purposes only!   ########
+###############################################################################
 
 # MongoDB driver:
 from pymongo import MongoClient
-# Our MongoDB connection class:
-from mongocon import MongoConnection
-# Mail sender:
-from smtplib import SMTP_SSL
-# Some stuff to deserialize objects:v
+# Our send mail class:
+from mailsender import MailSender
+# Some stuff to deserialize objects:
 from json import loads
 # And finally, our credentials:
-from credentials import email, password, smtp_server, sqs, incoming_queue, mongo
+from credentials import sqs, incoming_queue, mongo, mail_creds
 
 # This function returns a hyperlink, retrieved from MongoDB,
 # to the xlsx report file, which stores in AWS S3 object storage,
 # for the provided occupation.
 def get_href_from_mongo(occupation):
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:    
         # Connection to 'xlsx' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['xlsx']
+        collection = mongodb.hh_reports['xlsx']
         # Attempt to find an existing report
         report = collection.find_one({'occupation': occupation})
         return report.get('report')
 
 # This function gets an occupation name and email address from MongoDB.
 def get_email_from_mongo():
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:    
         # Connection to 'orders' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['orders']
+        collection = mongodb.hh_reports['orders']
         # Gets serial number of last added order
         number = collection.estimated_document_count()-1
         # Get e-mail
@@ -49,7 +48,6 @@ def delete_message_from_queue():
     # Receive message and provide 'VisibilityTimeout' to queue
     raw_message = sqs.receive_message(QueueUrl=incoming_queue,
                                       VisibilityTimeout=60)
-
     # Receive 'ReceiptHandle' from message
     receipt_handle = raw_message['Messages'][0]['ReceiptHandle']
     # And finally deletes the message
@@ -57,34 +55,20 @@ def delete_message_from_queue():
                        ReceiptHandle=receipt_handle)
 
 # This function forms and sends e-mail message
-def send_email():
-    subject = 'The vacancies analysis report you ordered'
+def send_email_to_customer():
+    # Message subject
+    success = 'Ваш отчёт готов!'
     # Retrieve occupation name and email address
-    dest_email, occupation = get_email_from_mongo()
+    order_customer, occupation = get_email_from_mongo()
     # Retrieve a hyperlink to the xlsx report file
-    email_text = get_href_from_mongo(occupation)
-    # Form a message
-    raw_message = (f'From: {email}\n'
-                   f'To: {dest_email}\n'
-                   f'Subject: {subject}\n\n'
-                   f'{email_text}')
+    message = get_href_from_mongo(occupation)
+    mail = MailSender( [mail_creds['admin'], order_customer],
+                        success, 
+                        message )
+    mail.send_email()
 
-    message = raw_message.encode('utf-8')
-    # Create mail sender object
-    server = SMTP_SSL(smtp_server)
-    # Enable debug output
-    server.set_debuglevel(1)
-    # Some authentication and authorizations
-    server.ehlo(email)
-    server.login(email, password) #stopped!!!
-    server.auth_plain()
-    # Send email
-    server.sendmail(email, dest_email, message)
-    # Destroy mail sender object
-    server.quit()
-
-
+# Checks importing issue
 if __name__ == "__main__":
-    
-    send_email()
+    # Start test
+    send_email_to_customer()
     delete_message_from_queue()

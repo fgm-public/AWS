@@ -31,3 +31,9 @@ outgoing_rqueue = 'https://sqs.us-east-2.amazonaws.com/123456789010/myrqueue'
 
 # Flask secret key for security purposes
 SECRET_KEY = 'X2xX2xX2xX2xX2xX2xX2xX2xX2xX2xX2xX'
+
+# E-mail credentials
+mail_creds = { 'admin': 'mail@.gmail.com',
+               'source': 'mail@.yandex.ru',
+               'password': 'xxx',
+               'smtp_server': 'smtp.yandex.com', }
